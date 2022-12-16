@@ -1,0 +1,125 @@
+Инструкция предназначена для работы на версии Ubuntu 22.04
+Примечание: вместо YOUR_DOMAIN требуется вводить название вашего домена
+
+1) Установка Nginx
+$ sudo apt install nginx # Установка пакетов Nginx
+$ sudo ufw allow 'Nginx HTTP' # Проверяем какие профили UFW доступны
+$ sudo ufw enable # Включаем разрешение обычного HTTP-трафика на 80 порт.
+$ sudo ufw status # Смотрим статусы профилей
+$ ip addr show # Смотрим адрес нашей машины
+$ Переходим в браузер и проверяем веб-сайт http://your_ip_address_or_domain
+
+2) Установка MySQL
+$ sudo apt install mysql-server # скачиваем пакеты MySQL
+$ sudo mysql # Входим в режим MySQL
+$ exit # Выходим с режима MySQL
+
+3) Установка PHP
+$ sudo apt install php8.1-fpm php-mysql #Устанавливаем пакеты PHP
+
+4) Настройка Nginx для использования процессора PHP
+$ sudo mkdir /var/www/your_domain # Создаем корневой веб-каталог для домена
+$ sudo chown -R $USER:$USER /var/www/YOUR_DOMAIN # Назначаем право собственности на каталог с $USER переменной среды, которая будет ссылаться на нашего текущего системного пользователя
+$ sudo nano /etc/nginx/sites-available/YOUR_DOMAIN # Открываем конфигурацию в каталоге sites-available
+вставляем следущее:
+server {
+    listen 80;
+    server_name YOUR_DOMAIN www.YOUR_DOMAIN;
+    root /var/www/YOUR_DOMAIN;
+
+    index index.html index.htm index.php;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    location ~ \.php$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:/var/run/php/php8.1-fpm.sock;
+     }
+
+    location ~ /\.ht {
+        deny all;
+    }
+
+$ sudo ln -s /etc/nginx/sites-available/your_domain /etc/nginx/sites-enabled/ # Активируем свою конфигурацию, связавшись с файлом конфигурации из sites-enabled каталога Nginx
+$ sudo unlink /etc/nginx/sites-enabled/default  #  Отсоединяем файл конфигурации по умолчанию от /sites-enabled/ каталога
+$ sudo nginx -t # Проверяем конфигурацию на наличие синтактических ошибок
+$ sudo systemctl reload nginx # Перезагружаем Nginx
+
+5) Установка необходимых модулей PHP
+$ sudo apt install php-mbstring php-xml php-bcmath php-curl # Устанавливаем пакеты PHP
+
+6) Создание БД для Laravel
+$ sudo mysql # Входим в режим MySQL
+mysql> CREATE DATABASE travellist;
+mysql> CREATE USER 'travellist_user'@'%' IDENTIFIED WITH mysql_native_password BY 'password';
+mysql> GRANT ALL ON travellist.* TO 'travellist_user'@'%';
+mysql> CREATE TABLE travellist.places (
+mysql> id INT AUTO_INCREMENT,
+mysql> name VARCHAR(255),
+mysql> visited BOOLEAN,
+mysql> PRIMARY KEY(id)
+mysql> );
+mysql> INSERT INTO travellist.places (name, visited) 
+mysql> VALUES ("Tokyo", false),
+mysql> ("Budapest", true),
+mysql> ("Nairobi", false),
+mysql> ("Berlin", true),
+mysql> SELECT * FROM travellist.places;
+mysql> exit
+
+7) Установка Composer и Laravel
+$ sudo apt install composer # Устанавливаем пакеты Composer
+$ composer create-project --prefer-dist laravel/laravel travellist # Создаем новый travellist каталог, содержащий базовое приложение Laravel, на основе настроек по умолчанию
+$ cd travellist  # Переходим к каталогу с travellist
+$ php artisan # Убеждаемся что все компоненты были успешно установлены
+$ sudo mv ~/travellist /var/www/travellist # Перемещаем папки приложения со всем ее содержимым в /var/www/travellist
+$ sudo nano /etc/nginx/sites-available/travellist # Создадём новый файл конфигурации виртуального хоста по адресу /etc/nginx/sites-available
+вставляем следующее:
+server {
+    listen 80;
+    server_name YOUR_DOMAIN_OR_IP;
+    root /var/www/travellist/public;
+
+    add_header X-Frame-Options "SAMEORIGIN";
+    add_header X-XSS-Protection "1; mode=block";
+    add_header X-Content-Type-Options "nosniff";
+
+    index index.html index.htm index.php;
+
+    charset utf-8;
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location = /favicon.ico { access_log off; log_not_found off; }
+    location = /robots.txt  { access_log off; log_not_found off; }
+
+    error_page 404 /index.php;
+
+    location ~ \.php$ {
+        fastcgi_pass unix:/var/run/php/php8.1-fpm.sock;
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+        include fastcgi_params;
+    }
+
+    location ~ /\.(?!well-known).* {
+        deny all;
+    }
+}
+$ sudo ln -s /etc/nginx/sites-available/travellist /etc/nginx/sites-enabled/ # Активируем новый файл конфигурации виртуального хоста символической ссылкой
+$ sudo nginx -t # Проверка конфигураций на наличие синтаксических ошибок
+$ sudo systemctl reload nginx # Перезагружаем Nginx
+
+8) Изменение порта
+$ sudo nano /etc/nginx/sites-available/default # Открываем файл с главными настройками Laravel от Nginx
+Находим следующее:
+server {
+  listen 80 defaul_server;
+  listen [::]:80 default_server;
+  Заменяем 80 на 8000 или на другой нужный нам порт
+  MISSION COMPLETE
+
